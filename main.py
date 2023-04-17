@@ -6,17 +6,19 @@ from flask_login import UserMixin, login_user, LoginManager, login_required, cur
 app = Flask(__name__)
 
 app.config['SECRET_KEY'] = 'any-secret-key-you-choose'
+app.app_context().push()
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-##CREATE TABLE IN DB
+
+# #CREATE TABLE IN DB
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(100), unique=True)
     password = db.Column(db.String(100))
     name = db.Column(db.String(1000))
-#Line below only required once, when creating DB. 
+# Line below only required once, when creating DB.
 # db.create_all()
 
 
@@ -25,8 +27,17 @@ def home():
     return render_template("index.html")
 
 
-@app.route('/register')
+@app.route('/register', methods=['GET', 'POST'])
 def register():
+    if request.method == "POST":
+        new_user = User(
+            email=request.form['email'],
+            password=request.form['password'],
+            name=request.form['name']
+        )
+        db.session.add(new_user)
+        db.session.commit()
+        return redirect(url_for('secrets', username=new_user.name))
     return render_template("register.html")
 
 
@@ -35,9 +46,9 @@ def login():
     return render_template("login.html")
 
 
-@app.route('/secrets')
-def secrets():
-    return render_template("secrets.html")
+@app.route('/secrets/<username>')
+def secrets(username):
+    return render_template("secrets.html", name=username)
 
 
 @app.route('/logout')
