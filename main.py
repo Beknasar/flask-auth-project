@@ -11,6 +11,14 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
+login_manager = LoginManager()
+login_manager.init_app(app)
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    return db.session.query(User).get(user_id)
+
 
 # #CREATE TABLE IN DB
 class User(UserMixin, db.Model):
@@ -30,35 +38,62 @@ def home():
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == "POST":
+        hash_and_salted_password = generate_password_hash(
+            request.form['password'],
+            method='pbkdf2:sha256',
+            salt_length=8
+        )
         new_user = User(
             email=request.form['email'],
-            password=request.form['password'],
+            password=hash_and_salted_password,
             name=request.form['name']
         )
         db.session.add(new_user)
         db.session.commit()
-        return redirect(url_for('secrets', username=new_user.name))
+
+        # Log in and authenticate user after adding details to database.
+        login_user(new_user)
+
+        return redirect(url_for('secrets'))
     return render_template("register.html")
 
 
-@app.route('/login')
+@app.route('/login', methods=['GET', 'POST'])
 def login():
+    if request.method == "POST":
+        email = request.form['email']
+        password = request.form['password']
+
+        # Find user by email entered.
+        user = db.session.query(User).filter_by(email=email).first()
+
+        # Check stored password hash against entered password hashed.
+        if check_password_hash(user.password, password):
+            login_user(user)
+            return redirect(url_for('secrets'))
+
     return render_template("login.html")
 
 
-@app.route('/secrets/<username>')
-def secrets(username):
-    return render_template("secrets.html", name=username)
+@app.route('/secrets')
+@login_required
+def secrets():
+    if current_user.is_authenticated:
+        return render_template("secrets.html", name=current_user.name)
 
 
 @app.route('/logout')
 def logout():
-    pass
+    logout_user()
+    return redirect(url_for('home'))
 
 
 @app.route('/download')
+@login_required
 def download():
-    pass
+    # return send_from_directory(directory='static/files', path='cheat_sheet.pdf', as_attachment=True)
+    return send_from_directory('static', 'files/cheat_sheet.pdf')
+    # return send_from_directory(app.static_folder, 'files/cheat_sheet.pdf')
 
 
 if __name__ == "__main__":
